@@ -147,8 +147,13 @@ def setup_2fa():
 
 
 def collect(ed):
-    ident, pwd = os.environ["ED_ID"], os.environ["ED_PASSWORD"]
+    ident = os.environ["ED_ID"].strip()
+    pwd = os.environ["ED_PASSWORD"].strip()
     fa = json.loads(os.environ.get("ED_FA", "[]"))
+    print(f"Diagnostic : identifiant {len(ident)} car., mot de passe {len(pwd)} car., "
+          f"ED_FA {len(fa)} entrée(s)")
+    if pwd[:1] in "\"'" and pwd[-1:] == pwd[:1]:
+        print("ATTENTION : le mot de passe est entouré de guillemets dans la variable.")
     j = ed.login(ident, pwd, fa)
     if j.get("code") != 200:
         raise SystemExit(f"Connexion refusée : {j.get('code')} {j.get('message')}")
