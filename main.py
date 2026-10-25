@@ -175,9 +175,19 @@ def collect(ed):
 
         # Détail des devoirs, jour par jour (contenu complet)
         jours = {}
+        # Contenu de séance des 3 derniers jours (aujourd'hui + 2 jours avant)
+        for k in (2, 1, 0):
+            d = (today - timedelta(days=k)).isoformat()
+            rep = safe(ed, f"/Eleves/{sid}/cahierdetexte/{d}.awp", {}, "verbe=get&")
+            jours[d] = rep
+            texte = format_cours(nom, d, rep)
+            if texte:  # on n'écrase jamais un fichier existant avec du vide / une erreur
+                out[f"Cours/{nom}_{d}.txt"] = texte
+                out[f"Cours/brut/{nom}_{d}.json"] = rep
         dates = list((devoirs.get("data") or {}).keys())[:20]
         for d in dates:
-            jours[d] = safe(ed, f"/Eleves/{sid}/cahierdetexte/{d}.awp", {}, "verbe=get&")
+            if d not in jours:
+                jours[d] = safe(ed, f"/Eleves/{sid}/cahierdetexte/{d}.awp", {}, "verbe=get&")
 
         out[f"{nom}_notes.json"] = notes
         out[f"{nom}_devoirs_liste.json"] = devoirs
@@ -216,6 +226,34 @@ def clean_html(b):
     except Exception:
         return ""
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", t)).strip()
+
+
+JOURS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+
+def format_cours(nom, jour, rep):
+    """Texte lisible du cahier de texte d'un jour. Retourne '' si rien d'exploitable."""
+    if not isinstance(rep, dict) or rep.get("code") != 200:
+        return ""
+    matieres = (rep.get("data") or {}).get("matieres") or []
+    if not matieres:
+        return ""
+    nom_jour = JOURS_FR[date.fromisoformat(jour).weekday()]
+    L = [f"=== {nom} - {nom_jour} {jour} ===", ""]
+    for m in matieres:
+        L.append(f"[{m.get('matiere')}] {m.get('nomProf') or ''}".strip())
+        seance = m.get("contenuDeSeance") or {}
+        if seance.get("contenu"):
+            L.append("  Contenu de séance : " + clean_html(seance["contenu"]))
+        af = m.get("aFaire") or {}
+        if af.get("contenu"):
+            L.append(f"  À faire (donné le {af.get('donneLe')}) : "
+                     + clean_html(af["contenu"]))
+        for doc in (seance.get("documents") or []) + (af.get("documents") or []):
+            L.append(f"  Document joint : {doc.get('libelle')}")
+        L.append("")
+    return "\n".join(L)
+
 
 
 def make_summary(nom, notes, jours, vie):
